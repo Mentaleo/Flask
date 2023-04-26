@@ -3,12 +3,15 @@ import pandas as pd
 import joblib
 from sklearn.tree import DecisionTreeClassifier
 import sklearn
+import pickle
 
 app = Flask(__name__)
 
 # Load the pre-trained model
-model = joblib.load("Final_Model_DTC.pkl")
-
+# model = pickle.load("Final_Model_DTC.pkl")
+with open(r"E:\6.My Project\8th Sem Prj\Flask\Final_Model_DTC.pkl", "rb") as f:
+    model = pickle.load(f)
+    
 @app.route("/", methods=["GET", "POST"])
 def predict():
     if request.method == "POST":
@@ -28,7 +31,7 @@ def predict():
         care_options = {"No": 0, "Not sure": 1, "Yes": 2}[care_options]
         benefits = {"No": 0, "Not sure": 1, "Yes": 2}[benefits]
         obs_consequence = {"No": 0, "Yes": 1}[obs_consequence]
-        anonymity = {"No": 0, "Yes": 1}[anonymity]
+        anonymity = {"No": 0, "Not sure": 1, "Yes": 2}[anonymity]
         mental_health_interview = {"No": 0, "Maybe": 1, "Yes": 2}[mental_health_interview]
         wellness_program = {"No": 0, "Not sure": 1, "Yes": 2}[wellness_program]
         seek_help = {"No": 0, "Not sure": 1, "Yes": 2}[seek_help]

@@ -1,67 +1,81 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, jsonify
 import pandas as pd
 import joblib
 from sklearn.tree import DecisionTreeClassifier
 import sklearn
 import pickle
+from flask_cors import CORS
+from sklearn.preprocessing import OneHotEncoder
+from flask_mail import Mail, Message
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
+mail= Mail(app)
+
+app.config['MAIL_SERVER']='smtp.gmail.com'
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USERNAME'] = 'noreplymentalio@gmail.com'
+app.config['MAIL_PASSWORD'] = 'ngcxrdcufoeihirg'
+app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_USE_SSL'] = True
+mail = Mail(app)
 
 # Load the pre-trained model
-# model = pickle.load("Final_Model_DTC.pkl")
-with open(r"E:\6.My Project\8th Sem Prj\Flask\Final_Model_DTC.pkl", "rb") as f:
+with open(r"Final_Model_DTC.pkl", "rb") as f:
     model = pickle.load(f)
+
+# Load the one-hot encoder for the categorical columns
+with open(r"Final_Encoder.pkl", "rb") as f:
+    encoder = pickle.load(f)
     
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["POST"])
 def predict():
-    if request.method == "POST":
-        # Extract the form data
-        work_interfere = request.form.get("work_interfere")
-        family_history = request.form.get("family_history")
-        care_options = request.form.get("care_options")
-        benefits = request.form.get("benefits")
-        obs_consequence = request.form.get("obs_consequence")
-        anonymity = request.form.get("anonymity")
-        mental_health_interview = request.form.get("mental_health_interview")
-        wellness_program = request.form.get("wellness_program")
-        seek_help = request.form.get("seek_help")
+    # Extract the form data from the POST request
+    data = request.get_json()
+    name=data['name']
+    email=data['email']
+    age=data['age']
+    gender=data['gender']
 
-        work_interfere = {"Never": 0, "Rarely": 1, "Sometimes": 2, "Often": 3}[work_interfere]
-        family_history = {"No": 0, "Yes": 1}[family_history]
-        care_options = {"No": 0, "Not sure": 1, "Yes": 2}[care_options]
-        benefits = {"No": 0, "Not sure": 1, "Yes": 2}[benefits]
-        obs_consequence = {"No": 0, "Yes": 1}[obs_consequence]
-        anonymity = {"No": 0, "Not sure": 1, "Yes": 2}[anonymity]
-        mental_health_interview = {"No": 0, "Maybe": 1, "Yes": 2}[mental_health_interview]
-        wellness_program = {"No": 0, "Not sure": 1, "Yes": 2}[wellness_program]
-        seek_help = {"No": 0, "Not sure": 1, "Yes": 2}[seek_help]
+    data.pop("name")
+    data.pop("email")
+    data.pop("age")
+    data.pop("country")
+    data.pop("gender")
 
-        # Create a DataFrame with the form data
-        data = pd.DataFrame({
-            "work_interfere": [work_interfere],
-            "family_history": [family_history],
-            "care_options": [care_options],
-            "benefits": [benefits],
-            "obs_consequence": [obs_consequence],
-            "anonymity": [anonymity],
-            "mental_health_interview": [mental_health_interview],
-            "wellness_program": [wellness_program],
-            "seek_help": [seek_help]
-        })
+    # Convert the form data into a DataFrame
+    data = pd.DataFrame(data, index=[0])
 
-        # Make a prediction using the pre-trained model
-        prediction = model.predict(data)[0]
+    # Encode categorical columns
+    data['work_interfere'] = {"never": 0, "rarely": 1, "sometimes": 2, "often": 3,"don't Know": 4}[data['work_interfere'].iloc[0]]
+    data['family_history'] = {"no": 0, "yes": 1}[data['family_history'].iloc[0]]
+    data['care_options'] = {"no": 0, "not sure": 1, "yes": 2,"don't Know": 3}[data['care_options'].iloc[0]]
+    data['benefits'] = {"no": 0, "not sure": 1, "yes": 2,"don't Know": 3}[data['benefits'].iloc[0]]
+    data['obs_consequence'] = {"no": 0, "yes": 1}[data['obs_consequence'].iloc[0]]
+    data['anonymity'] = {"no": 0, "not sure": 1, "yes": 2,"don't Know": 3}[data['anonymity'].iloc[0]]
+    data['mental_health_interview'] = {"no": 0, "maybe": 1, "yes": 2,"don't Know": 3}[data['mental_health_interview'].iloc[0]]
+    data['wellness_program'] = {"no": 0, "not sure": 1, "yes": 2,"don't Know": 3}[data['wellness_program'].iloc[0]]
+    data['seek_help'] = {"no": 0, "not sure": 1, "yes": 2,"don't Know": 3}[data['seek_help'].iloc[0]]
 
-        if prediction == 0:
-            prediction = "No"
-        else:
-            prediction = "Yes"
+    # Make a prediction using the pre-trained model
+    prediction = model.predict(data)[0]
 
-        # Render the result template with the predicted target
-        return render_template("result.html", target=prediction)
+    if prediction == 0:
+        prediction = "No"
+        state="Good"
+    else:
+        prediction = "Yes"
+        state="Bad"
 
-    # Render the form template on GET request
-    return render_template("index.html")
+    msg = Message('Hello', sender = 'mentaleo2023@gmail.com', recipients = [email])
+    msg.body = "Subject: Mental Health Prediction Result\n\nDear {name},\n\nAge:{age}, Gender{gender},\n\nYour predicted mental is {state}.\n\nYou need mental health assistance?{prediction}"
+    mail.send(msg)
+    return jsonify({"prediction": prediction})
+    
+    # # Create the message
+    # msg = f"Subject: Mental Health Prediction Result\n\nDear {name},\n\nAge:{age}, Gender{gender},\n\nYour predicted mental is {state}.\n\nYou need mental health assistance?{prediction}"
+    # # Return the predicted target as a JSON response
+    # return jsonify({"prediction": prediction})
 
 
 if __name__ == '__main__':
